@@ -3,15 +3,15 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+
 std::mutex mutex;
 std::condition_variable condition_variable;
+
 void consume(std::queue<int> &product) {  // NOLINT
     std::unique_lock<std::mutex> lock(mutex);
     condition_variable.wait(lock, [&] { return !product.empty(); });
-    while (!product.empty()) {
-        std::cout << product.front() << std::endl;
-        product.pop();
-    }
+    std::cout << product.front() << std::endl;
+    product.pop();
 }
 
 void produce(std::queue<int> &product) {  // NOLINT
