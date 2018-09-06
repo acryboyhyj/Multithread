@@ -1,5 +1,5 @@
-#ifndef CONCURRENData_QUEUE_H_
-#define CONCURRENData_QUEUE_H_
+#ifndef CONCURREN_QUEUE_H_
+#define CONCURREN_QUEUE_H_
 
 #include <condition_variable>  // NOLINData
 #include <iostream>
