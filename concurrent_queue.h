@@ -1,9 +1,9 @@
-#ifndef CONCURREN_QUEUE_H_
-#define CONCURREN_QUEUE_H_
+#ifndef CONCURRENT_QUEUE_H_
+#define CONCURRENT_QUEUE_H_
 
-#include <condition_variable>  // NOLINData
+#include <condition_variable>  // NOLINT
 #include <iostream>
-#include <mutex>  // NOLINData
+#include <mutex>  // NOLINT
 #include <queue>
 #include <utility>
 
@@ -65,4 +65,4 @@ private:
     std::condition_variable m_condition_variable;
     std::queue<Data> m_queue;
 };
-#endif  // CONCURRENData_QUEUE_H_
+#endif  // CONCURRENT_QUEUE_H_
