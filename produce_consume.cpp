@@ -1,83 +1,106 @@
+#include <memory.h>
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <iostream>
 #include <mutex>
 #include <thread>
-
+#include <vector>
 template <class Data>
 class Buffer {
+private:
+    int m_capacity;
+    int m_front;
+    int m_rear;
+    int m_size;
+
+    Data* m_buffer;
+    std::mutex m_mutex;
+    std::condition_variable m_not_full;
+    std::condition_variable m_not_empty;
+
 public:
     explicit Buffer(int capacity)
-        : m_capacity(capacity), m_count(0), m_front(0), m_rear(0) {
-        buffer = new Data[capacity];
-    }
+        : m_capacity(capacity),
+          m_front(0),
+          m_rear(0),
+          m_size(0),
+          m_buffer(new Data(capacity)) {}
 
-    ~Buffer() { delete[] buffer; }
-    Buffer(const Buffer &) = delete;
-    Buffer &operator=(const Buffer &) = delete;
+    ~Buffer() { delete[] m_buffer; }
+    Buffer operator=(const Buffer&) = delete;
+    Buffer(const Buffer&)           = delete;
 
-    void deposit(const Data &data) {
+    void Deposit(const Data& data) {
         {
             std::unique_lock<std::mutex> lock(m_mutex);
-            m_notfull.wait(lock, [this] { return m_count < m_capacity; });
-            buffer[m_rear++] = data;
-            m_rear           = (m_rear) % m_capacity;
-            ++m_count;
+            m_not_full.wait(lock, [this] { return m_size < m_capacity; });
+            m_buffer[m_rear] = data;
+            m_rear           = (m_rear + 1) % m_capacity;
+            m_size++;
         }
-        m_notempty.notify_one();
+        m_not_empty.notify_one();
     }
 
-    void fetch(Data &data) {
+    void fetch(Data& data) {
         {
             std::unique_lock<std::mutex> lock(m_mutex);
-            m_notempty.wait(lock, [this] { return m_count > 0; });
-            data    = std::move(buffer[m_front++]);
-            m_front = m_front % m_capacity;
-            --m_count;
+            m_not_empty.wait(lock, [this] { return m_size > 0; });
+            data    = std::move(m_buffer[m_front]);
+            m_front = (m_front + 1) % m_capacity;
+            m_size--;
         }
-        m_notfull.notify_one();
+        m_not_full.notify_one();
+    }
+};
+
+template <class Data>
+class Consumer {
+public:
+    explicit Consumer(Buffer<Data>& buffer) : m_buffer(buffer) {}
+    ~Consumer();
+
+    void Consume() {
+        for (int i = 0; i < 50; ++i) {
+            Data data;
+            m_buffer.fetch(data);
+            std::cout << "consumer "
+                      << " comsume " << data << '\n';
+        }
     }
 
 private:
-    std::mutex m_mutex;
-    std::condition_variable m_notfull;
-    std::condition_variable m_notempty;
-    Data *buffer;
-    int m_capacity;
-    int m_count;
-    int m_front;
-    int m_rear;
+    Buffer<Data>& m_buffer;
 };
+
 template <class Data>
-void consume(int id, Buffer<Data> &buffer) {  // NOLINT
-    for (int i = 0; i < 50; ++i) {
-        Data data;
-        buffer.fetch(data);
-        std::cout << "consume " << id << " fetched " << data << '\n';
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+class Producer {
+public:
+    explicit Producer(Buffer<Data>& buffer) : m_buffer(buffer) {}
+    ~Producer();
+
+    void Produce() {  // NOLINT
+        for (int i = 0; i < 50; i++) {
+            m_buffer.Deposit(i);
+            std::cout << "product  produced " << i << '\n';
+        }
     }
-}
-template <class Data>
-void produce(int id, Buffer<Data> &buffer) {  // NOLINT
-    for (int i = 0; i < 75; i++) {
-        buffer.deposit(i);
-        std::cout << "product " << id << " produced " << i << '\n';
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-}
+
+private:
+    Buffer<Data>& m_buffer;
+};
 
 int main() {
-    std::thread thread_produce[5];
     std::thread thread_consume[5];
+    std::thread thread_produce[5];
 
     Buffer<int> buffer(200);
-
+    std::vector<Producer<int>> producers{Producer<int>(buffer)};
     for (int i = 0; i < 5; ++i) {
-        thread_produce[i] = std::thread(produce<int>, i, std::ref(buffer));
-        thread_consume[i] = std::thread(consume<int>, i, std::ref(buffer));
+        thread_consume[i] = std::thread();
+        thread_produce[i] = std::thread();
     }
-
-    for (auto &th_c : thread_consume) th_c.join();
-    for (auto &th_p : thread_produce) th_p.join();
-
+    for (auto& th_c : thread_consume) th_c.join();
+    for (auto& th_p : thread_produce) th_p.join();
     return 0;
 }
