@@ -1,5 +1,5 @@
 #include <memory.h>
-#include <atomic>
+
 #include <chrono>
 #include <condition_variable>
 #include <iostream>
@@ -7,13 +7,13 @@
 #include <thread>
 #include <vector>
 template <class Data>
+
 class Buffer {
 private:
     int m_capacity;
     int m_front;
     int m_rear;
     int m_size;
-
     Data* m_buffer;
     std::mutex m_mutex;
     std::condition_variable m_not_full;
@@ -25,7 +25,7 @@ public:
           m_front(0),
           m_rear(0),
           m_size(0),
-          m_buffer(new Data(capacity)) {}
+          m_buffer(new Data[m_capacity]) {}
 
     ~Buffer() { delete[] m_buffer; }
     Buffer operator=(const Buffer&) = delete;
@@ -42,7 +42,7 @@ public:
         m_not_empty.notify_one();
     }
 
-    void fetch(Data& data) {
+    void Fetch(Data& data) {
         {
             std::unique_lock<std::mutex> lock(m_mutex);
             m_not_empty.wait(lock, [this] { return m_size > 0; });
@@ -55,51 +55,34 @@ public:
 };
 
 template <class Data>
-class Consumer {
-public:
-    explicit Consumer(Buffer<Data>& buffer) : m_buffer(buffer) {}
-    ~Consumer();
-
-    void Consume() {
-        for (int i = 0; i < 50; ++i) {
-            Data data;
-            m_buffer.fetch(data);
-            std::cout << "consumer "
-                      << " comsume " << data << '\n';
-        }
+void Consume(Buffer<Data>& buffer) {
+    for (int i = 0; i < 50; ++i) {
+        Data data;
+        buffer.Fetch(data);
+        std::cout << "consumer "
+                  << " comsume " << data << '\n';
     }
-
-private:
-    Buffer<Data>& m_buffer;
-};
+}
 
 template <class Data>
-class Producer {
-public:
-    explicit Producer(Buffer<Data>& buffer) : m_buffer(buffer) {}
-    ~Producer();
-
-    void Produce() {  // NOLINT
-        for (int i = 0; i < 50; i++) {
-            m_buffer.Deposit(i);
-            std::cout << "product  produced " << i << '\n';
-        }
+void Produce(Buffer<Data>& buffer) {  // NOLINT
+    for (int i = 0; i < 50; i++) {
+        buffer.Deposit(i);
+        std::cout << "product  produced " << i << '\n';
     }
-
-private:
-    Buffer<Data>& m_buffer;
-};
+}
 
 int main() {
     std::thread thread_consume[5];
     std::thread thread_produce[5];
 
-    Buffer<int> buffer(200);
-    std::vector<Producer<int>> producers{Producer<int>(buffer)};
+    Buffer<int> buffer(50);
     for (int i = 0; i < 5; ++i) {
-        thread_consume[i] = std::thread();
-        thread_produce[i] = std::thread();
+        thread_consume[i] = std::thread(Consume<int>, std::ref(buffer));
+
+        thread_produce[i] = std::thread(Produce<int>, std::ref(buffer));
     }
+
     for (auto& th_c : thread_consume) th_c.join();
     for (auto& th_p : thread_produce) th_p.join();
     return 0;
